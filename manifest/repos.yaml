@@ -1,0 +1,5 @@
+targets:
+  - name: "subnet-sample"        # произвольное название подсети
+    repo: "owner/repo"           # пример: "bittensor/subnet-template"
+    branch: "main"               # или конкретный commit SHA
+    notes_dir: "notes/subnet-sample"
