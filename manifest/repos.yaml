@@ -1,5 +1,5 @@
 targets:
-  - name: "subnet-template"
-    repo: "bittensor/subnet-template"
-    branch: "main"
-    notes_dir: "notes/subnet-template"
+  - name: "mantis"
+    repo: "Barbariandev/MANTIS"
+    branch: "main"           # это дефолтная ветка в MANTIS
+    notes_dir: "notes/mantis"
