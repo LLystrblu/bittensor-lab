@@ -1,0 +1,79 @@
+name: Prepare data (unzip + split logs)
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+permissions:
+  contents: write
+jobs:
+  prepare-data:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y unzip python3
+
+      - name: Prepare output dirs
+        run: |
+          rm -rf analysis
+          mkdir -p analysis/extracted analysis/logs
+
+      - name: Unzip all ZIPs in data/
+        shell: bash
+        run: |
+          set -e
+          if [ -d "data" ]; then
+            while IFS= read -r -d '' z; do
+              rel="${z#./}"
+              base=$(basename "$rel" .zip)
+              out="analysis/extracted/${rel%/*}/$base"
+              mkdir -p "$out"
+              unzip -o "$z" -d "$out"
+            done < <(find data -type f -name "*.zip" -print0)
+          fi
+
+      - name: Split all .log files in data/ into chunks with line numbers
+        shell: bash
+        run: |
+          set -e
+          python3 - << 'PY'
+          import pathlib
+          ROOT = pathlib.Path("data")
+          OUT  = pathlib.Path("analysis/logs")
+          OUT.mkdir(parents=True, exist_ok=True)
+          MAX_CHARS = 500_000  # ~0.5MB на кусок; можно менять
+          if ROOT.exists():
+              for p in ROOT.rglob("*.log"):
+                  rel = p.relative_to(ROOT)
+                  text = p.read_text(errors="ignore")
+                  lines = text.splitlines()
+                  numbered = [f"{i+1:08d}: {line}" for i, line in enumerate(lines)]
+                  doc = "\n".join(numbered)
+                  start = 0
+                  idx = 0
+                  while start < len(doc):
+                      end = min(start + MAX_CHARS, len(doc))
+                      cut = doc.rfind("\n", start, end)
+                      if cut == -1 or cut <= start:
+                          cut = end
+                      chunk = doc[start:cut]
+                      chunk_dir = OUT / rel.parent
+                      chunk_dir.mkdir(parents=True, exist_ok=True)
+                      (chunk_dir / f"{rel.stem}.part{idx:04d}.txt").write_text(chunk)
+                      idx += 1
+                      start = cut + 1
+          PY
+
+      - name: Commit to analysis branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B analysis
+          git add -A
+          git commit -m "chore: unzip ZIPs and split logs for analysis" || echo "Nothing to commit"
+          git push -f origin analysis
